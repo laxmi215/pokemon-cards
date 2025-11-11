@@ -1,15 +1,12 @@
-// Import required libraries for JSON parsing, random number generation, UI, and HTTP requests
 import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
-// Entry point of the application
 void main() {
   runApp(const MyApp());
 }
 
-// Root widget of the application
 class MyApp extends StatelessWidget {
   const MyApp({Key? key}) : super(key: key);
 
@@ -17,26 +14,24 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Pokémon Battle Arena',
-      debugShowCheckedModeBanner: false, // Remove debug banner for clean UI
       theme: ThemeData(
-        useMaterial3: true, // Use latest Material Design 3
+        useMaterial3: true,
         colorScheme: const ColorScheme.light(
-          primary: Color(0xFFDC0A2D), // Pokémon Red
-          onPrimary: Colors.white, // White text on red background
-          secondary: Color(0xFFFFCB05), // Pokémon Yellow
+          primary: Color(0xFFDC0A2D),
+          onPrimary: Colors.white,
+          secondary: Color(0xFFFFCB05),
         ),
       ),
-      home: const BattleScreen(), // Set BattleScreen as home page
+      home: const BattleScreen(),
     );
   }
 }
 
-// Model class representing a Pokémon card with essential battle information
 class PokemonCard {
-  final String id; // Unique Pokémon ID
-  final String name; // Pokémon name (e.g., "PIKACHU")
-  final String imageUrl; // URL to official artwork
-  final int hp; // Hit Points for battle comparison
+  final String id;
+  final String name;
+  final String imageUrl;
+  final int hp;
 
   PokemonCard({
     required this.id,
@@ -46,7 +41,6 @@ class PokemonCard {
   });
 }
 
-// Main battle screen widget (stateful to handle dynamic data)
 class BattleScreen extends StatefulWidget {
   const BattleScreen({Key? key}) : super(key: key);
 
@@ -54,91 +48,70 @@ class BattleScreen extends StatefulWidget {
   State<BattleScreen> createState() => _BattleScreenState();
 }
 
-// State class for BattleScreen - manages battle data and animations
 class _BattleScreenState extends State<BattleScreen>
     with SingleTickerProviderStateMixin {
-  // Mixin for animation controller
+  PokemonCard? card1;
+  PokemonCard? card2;
+  bool isLoading = false;
+  String? errorMessage;
+  int winner = 0;
+  final Random random = Random();
 
-  // Battle state variables
-  PokemonCard? card1; // First Pokémon in battle
-  PokemonCard? card2; // Second Pokémon in battle
-  bool isLoading = false; // Loading state for API calls
-  String? errorMessage; // Error message to display if API fails
-  int winner = 0; // Winner indicator: 1 = card1, 2 = card2, 0 = tie
-  final Random random =
-      Random(); // Random number generator for Pokémon selection
-
-  // Animation controller for winner reveal effects
   late AnimationController _animationController;
-  late Animation<double> _scaleAnimation; // Scale animation for winner banner
+  late Animation<double> _scaleAnimation;
 
   @override
   void initState() {
     super.initState();
-
-    // Initialize animation controller for winner reveal effect
     _animationController = AnimationController(
-      duration: const Duration(milliseconds: 500), // Half-second animation
-      vsync: this, // Use this widget as ticker provider
+      duration: const Duration(milliseconds: 500),
+      vsync: this,
     );
-
-    // Create scale animation from 0.8 to 1.0 with elastic bounce effect
     _scaleAnimation = Tween<double>(begin: 0.8, end: 1.0).animate(
       CurvedAnimation(parent: _animationController, curve: Curves.elasticOut),
     );
-
-    // Load the first battle when app starts
     _loadBattle();
   }
 
   @override
   void dispose() {
-    // Clean up animation controller to prevent memory leaks
     _animationController.dispose();
     super.dispose();
   }
 
-  /// Fetches two random Pokémon from PokéAPI and determines the battle winner
-  /// Uses random IDs from 1-898 (all Pokémon from Gen 1-8)
   Future<void> _loadBattle() async {
-    // Reset state for new battle
     setState(() {
-      isLoading = true; // Show loading spinner
-      errorMessage = null; // Clear any previous errors
-      card1 = null; // Clear previous Pokémon
+      isLoading = true;
+      errorMessage = null;
+      card1 = null;
       card2 = null;
-      winner = 0; // Reset winner
+      winner = 0;
     });
 
     try {
       print('Fetching random Pokémon from PokéAPI...');
 
-      // Generate 2 random Pokémon IDs (1-898 available in PokéAPI)
-      final id1 = random.nextInt(898) + 1; // Random number from 1 to 898
+      // Get 2 random Pokemon IDs (1-898 available in PokeAPI)
+      final id1 = random.nextInt(898) + 1;
       final id2 = random.nextInt(898) + 1;
 
-      final List<PokemonCard> fetchedCards = []; // Store fetched Pokémon
+      final List<PokemonCard> fetchedCards = [];
 
-      // Fetch each Pokémon from the API
       for (int id in [id1, id2]) {
         final response = await http
             .get(Uri.parse('https://pokeapi.co/api/v2/pokemon/$id'))
-            .timeout(const Duration(seconds: 10)); // 10-second timeout
+            .timeout(const Duration(seconds: 10));
 
         if (response.statusCode == 200) {
-          // Parse JSON response
           final data = json.decode(response.body);
 
-          // Create PokemonCard object from API data
           final pokemonCard = PokemonCard(
             id: data['id'].toString(),
-            name:
-                (data['name'] as String).toUpperCase(), // Uppercase for display
+            name: (data['name'] as String).toUpperCase(),
             imageUrl: data['sprites']['other']['official-artwork']
-                    ['front_default'] ?? // Try official artwork first
-                data['sprites']
-                    ['front_default'] ?? // Fallback to regular sprite
-                '', // Empty string if no image available
+                    ['front_default'] ??
+                data['sprites']['front_default'] ??
+                '',
             hp: data['stats'][0]
                 ['base_stat'], // HP is first stat in stats array
           );
@@ -148,32 +121,24 @@ class _BattleScreenState extends State<BattleScreen>
         }
       }
 
-      // Verify we successfully fetched 2 Pokémon
       if (fetchedCards.length == 2) {
-        // Determine the winner by comparing HP values
-        // Returns: 1 if card1 wins, 2 if card2 wins, 0 if tie
         final compWinner = fetchedCards[0].hp > fetchedCards[1].hp
-            ? 1 // Card 1 has higher HP
-            : (fetchedCards[1].hp > fetchedCards[0].hp
-                ? 2
-                : 0); // Card 2 wins or tie
+            ? 1
+            : (fetchedCards[1].hp > fetchedCards[0].hp ? 2 : 0);
 
-        // Update UI with battle results
         setState(() {
-          card1 = fetchedCards[0]; // Set first Pokémon
-          card2 = fetchedCards[1]; // Set second Pokémon
-          winner = compWinner; // Set winner indicator
-          isLoading = false; // Hide loading spinner
-          errorMessage = null; // Clear any errors
+          card1 = fetchedCards[0];
+          card2 = fetchedCards[1];
+          winner = compWinner;
+          isLoading = false;
+          errorMessage = null;
         });
 
-        // Start winner reveal animation (scale effect)
         _animationController.forward(from: 0.0);
       } else {
         throw Exception('Failed to load 2 Pokémon');
       }
     } catch (e) {
-      // Handle any errors during API fetch
       print('Error loading Pokémon: $e');
       setState(() {
         isLoading = false;
@@ -186,25 +151,23 @@ class _BattleScreenState extends State<BattleScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor:
-          Colors.lightBlue[50], // Light blue background for visual appeal
       appBar: AppBar(
         title: const Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.catching_pokemon, size: 28), // Pokéball icon
+            Icon(Icons.catching_pokemon, size: 28),
             SizedBox(width: 8),
             Text('Pokémon Battle Arena'),
           ],
         ),
         centerTitle: true,
-        backgroundColor: Theme.of(context).colorScheme.primary, // Pokémon Red
-        foregroundColor: Theme.of(context).colorScheme.onPrimary, // White text
+        backgroundColor: Theme.of(context).colorScheme.primary,
+        foregroundColor: Theme.of(context).colorScheme.onPrimary,
       ),
-      body: _buildBattleContent(), // Main content area
+      body: _buildBattleContent(),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: isLoading ? null : _loadBattle, // Disable during loading
-        icon: const Icon(Icons.auto_awesome), // Sparkle icon
+        onPressed: isLoading ? null : _loadBattle,
+        icon: const Icon(Icons.auto_awesome),
         label: const Text('NEW BATTLE'),
         backgroundColor:
             isLoading ? Colors.grey : Theme.of(context).colorScheme.primary,
@@ -213,15 +176,13 @@ class _BattleScreenState extends State<BattleScreen>
     );
   }
 
-  /// Builds the main content area - shows loading, error, or battle display
   Widget _buildBattleContent() {
-    // Show loading state while fetching Pokémon
     if (isLoading) {
       return const Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            CircularProgressIndicator(), // Spinning loader
+            CircularProgressIndicator(),
             SizedBox(height: 16),
             Text('Loading Pokémon...', style: TextStyle(fontSize: 18)),
           ],
@@ -229,26 +190,24 @@ class _BattleScreenState extends State<BattleScreen>
       );
     }
 
-    // Show error state if API fetch failed
     if (errorMessage != null) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.error_outline,
-                size: 64, color: Colors.red), // Error icon
+            const Icon(Icons.error_outline, size: 64, color: Colors.red),
             const SizedBox(height: 16),
             Padding(
               padding: const EdgeInsets.all(24.0),
               child: Text(
-                errorMessage!, // Display error message
+                errorMessage!,
                 textAlign: TextAlign.center,
                 style: const TextStyle(fontSize: 16),
               ),
             ),
             const SizedBox(height: 24),
             ElevatedButton.icon(
-              onPressed: _loadBattle, // Retry button to fetch new battle
+              onPressed: _loadBattle,
               icon: const Icon(Icons.refresh),
               label: const Text('Try Again'),
               style: ElevatedButton.styleFrom(
@@ -261,34 +220,31 @@ class _BattleScreenState extends State<BattleScreen>
       );
     }
 
-    // Safety check - ensure both Pokémon are loaded
     if (card1 == null || card2 == null) {
       return const Center(
         child: Text('No Pokémon loaded'),
       );
     }
 
-    // Build responsive battle layout (mobile vs desktop)
     return LayoutBuilder(
       builder: (context, constraints) {
-        final isWide = constraints.maxWidth > 600; // Desktop if width > 600px
+        final isWide = constraints.maxWidth > 600;
 
         return SingleChildScrollView(
           padding: const EdgeInsets.all(16.0),
           child: Column(
             children: [
-              // Winner banner (only shown if there's a winner, not a tie)
               if (winner != 0)
                 ScaleTransition(
-                  scale: _scaleAnimation, // Animated scale effect
+                  scale: _scaleAnimation,
                   child: Container(
                     padding: const EdgeInsets.all(16),
                     margin: const EdgeInsets.only(bottom: 24),
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         colors: [
-                          Theme.of(context).colorScheme.primary, // Red
-                          Theme.of(context).colorScheme.secondary, // Yellow
+                          Theme.of(context).colorScheme.primary,
+                          Theme.of(context).colorScheme.secondary,
                         ],
                       ),
                       borderRadius: BorderRadius.circular(16),
@@ -304,10 +260,9 @@ class _BattleScreenState extends State<BattleScreen>
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         const Icon(Icons.emoji_events,
-                            color: Colors.white, size: 32), // Trophy icon
+                            color: Colors.white, size: 32),
                         const SizedBox(width: 12),
                         Text(
-                          // Display winner's name
                           winner == 1
                               ? '${card1!.name} WINS!'
                               : '${card2!.name} WINS!',
@@ -321,20 +276,18 @@ class _BattleScreenState extends State<BattleScreen>
                     ),
                   ),
                 ),
-
-              // Tie banner (only shown if HP values are equal)
               if (winner == 0)
                 Container(
                   padding: const EdgeInsets.all(16),
                   margin: const EdgeInsets.only(bottom: 24),
                   decoration: BoxDecoration(
-                    color: Colors.grey[300], // Grey for tie
+                    color: Colors.grey[300],
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: const Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.handshake, size: 32), // Handshake icon for tie
+                      Icon(Icons.handshake, size: 32),
                       SizedBox(width: 12),
                       Text(
                         "IT'S A TIE!",
@@ -346,26 +299,22 @@ class _BattleScreenState extends State<BattleScreen>
                     ],
                   ),
                 ),
-
-              // Responsive layout: Row for desktop, Column for mobile
               isWide
                   ? Row(
                       children: [
-                        Expanded(
-                            child: _buildCardDisplay(card1!, 1)), // Left card
+                        Expanded(child: _buildCardDisplay(card1!, 1)),
                         const SizedBox(width: 24),
-                        Expanded(
-                            child: _buildCardDisplay(card2!, 2)), // Right card
+                        Expanded(child: _buildCardDisplay(card2!, 2)),
                       ],
                     )
                   : Column(
                       children: [
-                        _buildCardDisplay(card1!, 1), // Top card
+                        _buildCardDisplay(card1!, 1),
                         const SizedBox(height: 24),
-                        _buildCardDisplay(card2!, 2), // Bottom card
+                        _buildCardDisplay(card2!, 2),
                       ],
                     ),
-              const SizedBox(height: 80), // Space for floating button
+              const SizedBox(height: 80),
             ],
           ),
         );
@@ -373,23 +322,18 @@ class _BattleScreenState extends State<BattleScreen>
     );
   }
 
-  /// Builds the display card for a single Pokémon
-  /// Shows name, image, HP, and winner highlighting
-  /// cardNumber: 1 or 2 to identify which Pokémon this is
   Widget _buildCardDisplay(PokemonCard card, int cardNumber) {
-    final isWinner = winner == cardNumber; // Check if this Pokémon won
+    final isWinner = winner == cardNumber;
 
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          // Gold border for winner, grey for loser/tie
           color: isWinner ? Colors.amber : Colors.grey[300]!,
-          width: isWinner ? 4 : 2, // Thicker border for winner
+          width: isWinner ? 4 : 2,
         ),
         boxShadow: [
           BoxShadow(
-            // Gold glow for winner, subtle shadow for others
             color: isWinner
                 ? Colors.amber.withOpacity(0.4)
                 : Colors.black.withOpacity(0.1),
@@ -399,7 +343,7 @@ class _BattleScreenState extends State<BattleScreen>
         ],
       ),
       child: Card(
-        elevation: 0, // No elevation, we handle shadows above
+        elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
         ),
@@ -407,20 +351,18 @@ class _BattleScreenState extends State<BattleScreen>
           padding: const EdgeInsets.all(16.0),
           child: Column(
             children: [
-              // Winner badge (only shown for the winning Pokémon)
               if (isWinner)
                 Container(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
-                    color: Colors.amber, // Gold background
+                    color: Colors.amber,
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: const Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.emoji_events,
-                          size: 20, color: Colors.white), // Trophy
+                      Icon(Icons.emoji_events, size: 20, color: Colors.white),
                       SizedBox(width: 4),
                       Text(
                         'WINNER',
@@ -433,8 +375,6 @@ class _BattleScreenState extends State<BattleScreen>
                   ),
                 ),
               if (isWinner) const SizedBox(height: 12),
-
-              // Pokémon name
               Text(
                 card.name,
                 style: const TextStyle(
@@ -444,17 +384,14 @@ class _BattleScreenState extends State<BattleScreen>
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 12),
-
-              // Pokémon image (official artwork)
               if (card.imageUrl.isNotEmpty)
                 ClipRRect(
                   borderRadius: BorderRadius.circular(8),
                   child: Image.network(
-                    card.imageUrl, // Load image from PokéAPI URL
+                    card.imageUrl,
                     height: 200,
-                    fit: BoxFit.contain, // Maintain aspect ratio
+                    fit: BoxFit.contain,
                     errorBuilder: (context, error, stackTrace) {
-                      // Show placeholder if image fails to load
                       return Container(
                         height: 200,
                         color: Colors.grey[200],
@@ -464,20 +401,16 @@ class _BattleScreenState extends State<BattleScreen>
                   ),
                 ),
               const SizedBox(height: 16),
-
-              // HP display container
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  // Gold background for winner, grey for loser/tie
                   color: isWinner ? Colors.amber[50] : Colors.grey[100],
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.favorite,
-                        color: Colors.red), // Heart icon for HP
+                    const Icon(Icons.favorite, color: Colors.red),
                     const SizedBox(width: 8),
                     const Text(
                       'HP: ',
@@ -485,11 +418,10 @@ class _BattleScreenState extends State<BattleScreen>
                           TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                     ),
                     Text(
-                      '${card.hp}', // Display HP value
+                      '${card.hp}',
                       style: TextStyle(
                         fontSize: 24,
                         fontWeight: FontWeight.bold,
-                        // Green HP for winner, black for others
                         color: isWinner ? Colors.green[700] : Colors.black,
                       ),
                     ),
