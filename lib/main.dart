@@ -1,14 +1,26 @@
-import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
-import 'db_helper.dart';
-import 'web_db_helper.dart';
-import 'services/api_service.dart';
-import 'card_detail_screen.dart';
+/// Pokémon TCG Collection App - Main Entry Point
+///
+/// This file contains the main application logic including:
+/// - Material 3 themed UI with Pokémon colors
+/// - Responsive layout switching (mobile/desktop)
+/// - Real-time search functionality
+/// - Card display with alphabetical sorting
+/// - Platform-aware storage (SQLite for mobile, localStorage for web)
 
+import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb; // Platform detection
+import 'db_helper.dart'; // SQLite database for mobile
+import 'web_db_helper.dart'; // localStorage for web
+import 'services/api_service.dart'; // Pokémon TCG API integration
+import 'card_detail_screen.dart'; // Full-screen card detail view
+
+/// Application entry point
 void main() {
   runApp(const MyApp());
 }
 
+/// Root widget of the application
+/// Configures Material 3 theme with Pokémon-inspired colors
 class MyApp extends StatelessWidget {
   const MyApp({Key? key}) : super(key: key);
 
@@ -17,12 +29,12 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'Pokémon TCG Collection',
       theme: ThemeData(
-        useMaterial3: true,
+        useMaterial3: true, // Enable Material Design 3
         colorScheme: const ColorScheme.light(
-          primary: Color(0xFFDC0A2D), // Pokémon Red
+          primary: Color(0xFFDC0A2D), // Official Pokémon Red
           onPrimary: Colors.white,
-          secondary: Color(0xFFFFCB05), // Pokémon Yellow
-          background: Color(0xFFF0F8FF), // Alice Blue
+          secondary: Color(0xFFFFCB05), // Official Pokémon Yellow
+          background: Color(0xFFF0F8FF), // Light blue (Alice Blue)
           surface: Colors.white,
         ),
         scaffoldBackgroundColor: const Color(0xFFF0F8FF),
@@ -57,6 +69,12 @@ class MyApp extends StatelessWidget {
   }
 }
 
+/// Main screen displaying the list of Pokémon cards
+/// Features:
+/// - Responsive layout (mobile/desktop)
+/// - Real-time search functionality
+/// - Alphabetical sorting
+/// - Pull-to-refresh capability
 class CardListScreen extends StatefulWidget {
   const CardListScreen({Key? key}) : super(key: key);
 
@@ -64,42 +82,68 @@ class CardListScreen extends StatefulWidget {
   State<CardListScreen> createState() => _CardListScreenState();
 }
 
+/// State management for CardListScreen
 class _CardListScreenState extends State<CardListScreen> {
+  // Platform-aware database helper (SQLite for mobile, SharedPreferences for web)
   late final dynamic _dbHelper;
+
+  // API service for fetching cards from Pokémon TCG API
   final ApiService _apiService = ApiService();
+
+  // Complete list of cards from storage
   List<Map<String, dynamic>> _cards = [];
+
+  // Filtered list based on search query
   List<Map<String, dynamic>> _filteredCards = [];
+
+  // Loading state indicator
   bool _isLoading = true;
+
+  // Error message for display
   String? _errorMessage;
+
+  // Search bar text controller
   final TextEditingController _searchController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
-    // Use web-compatible database helper for web, SQLite for mobile
+    // Initialize platform-specific database helper
+    // kIsWeb detects if app is running on web platform
     _dbHelper = kIsWeb ? WebDatabaseHelper() : DatabaseHelper();
+
+    // Load cards from storage or API
     _loadCards();
+
+    // Listen to search input changes for real-time filtering
     _searchController.addListener(_filterCards);
   }
 
   @override
   void dispose() {
+    // Clean up search controller to prevent memory leaks
     _searchController.dispose();
     super.dispose();
   }
 
+  /// Filters the card list based on search query
+  /// Updates in real-time as user types
+  /// Also maintains alphabetical sorting
   void _filterCards() {
     setState(() {
       if (_searchController.text.isEmpty) {
+        // No search query - show all cards
         _filteredCards = List.from(_cards);
       } else {
+        // Filter cards by name (case-insensitive)
         _filteredCards = _cards.where((card) {
           final name = (card['name'] ?? '').toString().toLowerCase();
           final query = _searchController.text.toLowerCase();
-          return name.contains(query);
+          return name.contains(query); // Partial match
         }).toList();
       }
-      // Sort alphabetically by name
+
+      // Always sort results alphabetically (A-Z)
       _filteredCards.sort((a, b) {
         final nameA = (a['name'] ?? '').toString().toLowerCase();
         final nameB = (b['name'] ?? '').toString().toLowerCase();
@@ -108,6 +152,12 @@ class _CardListScreenState extends State<CardListScreen> {
     });
   }
 
+  /// Loads cards from local storage or fetches from API if empty
+  /// Sequence:
+  /// 1. Check local database for existing cards
+  /// 2. If empty, fetch from Pokémon TCG API
+  /// 3. Store in local database
+  /// 4. Display in UI
   Future<void> _loadCards() async {
     setState(() {
       _isLoading = true;
@@ -117,30 +167,31 @@ class _CardListScreenState extends State<CardListScreen> {
     try {
       print('Starting to load cards...');
 
-      // Check if database has cards
+      // Check if local storage has any cards
       int count = await _dbHelper.getCardCount();
       print('Current card count in DB: $count');
 
       if (count == 0) {
         print('No cards found, fetching from API...');
-        // Fetch from API and store in DB
+        // Database is empty - fetch fresh data from API
         await _apiService.fetchAndStoreCards();
         print('Cards fetched and stored successfully');
       }
 
-      // Load cards from database
+      // Load all cards from local database (fast operation)
       List<Map<String, dynamic>> cards = await _dbHelper.getCards();
       print('Loaded ${cards.length} cards from database');
 
       setState(() {
-        _cards = cards;
-        _filteredCards = List.from(cards);
-        _isLoading = false;
+        _cards = cards; // Store complete list
+        _filteredCards = List.from(cards); // Initialize filtered list
+        _isLoading = false; // Hide loading indicator
       });
 
-      // Sort alphabetically after loading
+      // Apply alphabetical sorting to initial load
       _filterCards();
     } catch (e, stackTrace) {
+      // Handle any errors during loading
       print('Error loading cards: $e');
       print('Stack trace: $stackTrace');
       setState(() {
@@ -150,9 +201,13 @@ class _CardListScreenState extends State<CardListScreen> {
     }
   }
 
+  /// Refreshes card list by clearing storage and fetching fresh data from API
+  /// Triggered by tapping the refresh button in app bar
   Future<void> _refreshCards() async {
     try {
+      // Clear all existing cards from local storage
       await _dbHelper.deleteAllCards();
+      // Reload cards (will fetch from API since storage is empty)
       await _loadCards();
     } catch (e) {
       setState(() {
@@ -165,6 +220,7 @@ class _CardListScreenState extends State<CardListScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: Container(
+        // Light blue gradient background
         decoration: const BoxDecoration(
           gradient: LinearGradient(
             colors: [Color(0xFFE3F4FD), Color(0xFFB3D9F2)],
@@ -257,7 +313,7 @@ class _CardListScreenState extends State<CardListScreen> {
               ),
             ),
 
-            // Body Content
+            // Body Content - Scrollable card list
             Expanded(
               child: _buildBody(),
             ),
@@ -267,7 +323,13 @@ class _CardListScreenState extends State<CardListScreen> {
     );
   }
 
+  /// Builds the main body content based on current state
+  /// Handles three states:
+  /// 1. Loading - Shows Pokéball spinner
+  /// 2. Error - Displays error message with retry button
+  /// 3. Success - Shows card list with search results
   Widget _buildBody() {
+    // Loading state - show animated Pokéball spinner
     if (_isLoading) {
       return Container(
         height: MediaQuery.of(context).size.height * 0.6,
@@ -275,10 +337,11 @@ class _CardListScreenState extends State<CardListScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // Pokéball-like loading spinner
+              // Custom Pokéball-style loading indicator
               Stack(
                 alignment: Alignment.center,
                 children: [
+                  // Outer rotating circle (red)
                   const SizedBox(
                     width: 60,
                     height: 60,
@@ -438,8 +501,8 @@ class _CardListScreenState extends State<CardListScreen> {
                   ),
                 )
               : ListView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
+                  shrinkWrap: true, // Allow ListView to size itself based on content
+                  physics: const NeverScrollableScrollPhysics(), // Disable ListView scrolling (parent handles it)
                   padding:
                       const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   itemCount: _filteredCards.length,
@@ -453,23 +516,28 @@ class _CardListScreenState extends State<CardListScreen> {
     );
   }
 
+  /// Builds a modern card tile with responsive layout
+  /// Automatically switches between mobile and desktop layouts based on screen width
+  /// Breakpoint: 600px (mobile < 600px, desktop >= 600px)
   Widget _buildModernCardTile(Map<String, dynamic> card) {
     return LayoutBuilder(
       builder: (context, constraints) {
+        // Responsive breakpoint - detect mobile vs desktop
         final isMobile = constraints.maxWidth < 600;
 
         return MouseRegion(
-          cursor: SystemMouseCursors.click,
+          cursor: SystemMouseCursors.click, // Show pointer cursor on hover (desktop)
           child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
+            duration: const Duration(milliseconds: 200), // Smooth hover animation
             margin: const EdgeInsets.only(bottom: 12),
             child: Material(
-              elevation: 2,
+              elevation: 2, // Default shadow
               borderRadius: BorderRadius.circular(16),
               shadowColor: Colors.black26,
               child: InkWell(
                 borderRadius: BorderRadius.circular(16),
                 onTap: () {
+                  // Navigate to full-screen detail view
                   Navigator.push(
                     context,
                     MaterialPageRoute(
@@ -502,14 +570,19 @@ class _CardListScreenState extends State<CardListScreen> {
     );
   }
 
+  /// Mobile layout (< 600px width)
+  /// Stacked vertical layout:
+  /// - Card image on top
+  /// - Card name below
+  /// Optimized for touch interaction on small screens
   Widget _buildMobileLayout(Map<String, dynamic> card) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Image on top for mobile
+        // Card image at the top
         if (card['imageSmall'] != null && card['imageSmall'].isNotEmpty)
           Hero(
-            tag: card['imageLarge'] ?? card['imageSmall'],
+            tag: card['imageLarge'] ?? card['imageSmall'], // Hero animation tag for smooth transition
             child: ClipRRect(
               borderRadius: const BorderRadius.only(
                 topLeft: Radius.circular(16),
@@ -519,8 +592,9 @@ class _CardListScreenState extends State<CardListScreen> {
                 card['imageSmall'],
                 width: double.infinity,
                 height: 200,
-                fit: BoxFit.contain,
+                fit: BoxFit.contain, // Maintain aspect ratio
                 errorBuilder: (context, error, stackTrace) {
+                  // Fallback if image fails to load
                   return Container(
                     height: 200,
                     color: Colors.grey[100],
@@ -534,6 +608,7 @@ class _CardListScreenState extends State<CardListScreen> {
               ),
             ),
           ),
+        // Card name text below image
         Padding(
           padding: const EdgeInsets.all(16.0),
           child: Column(
@@ -587,15 +662,21 @@ class _CardListScreenState extends State<CardListScreen> {
     );
   }
 
+  /// Desktop layout (>= 600px width)
+  /// Horizontal row layout:
+  /// - Card image on the left (compact)
+  /// - Card details in the center (name & ID)
+  /// - Arrow icon on the right
+  /// Optimized for mouse hover and larger screens
   Widget _buildDesktopLayout(Map<String, dynamic> card) {
     return Padding(
       padding: const EdgeInsets.all(16.0),
       child: Row(
         children: [
-          // Image on left for desktop
+          // Card image on the left side (compact size for desktop)
           if (card['imageSmall'] != null && card['imageSmall'].isNotEmpty)
             Hero(
-              tag: card['imageLarge'] ?? card['imageSmall'],
+              tag: card['imageLarge'] ?? card['imageSmall'], // Shared tag for Hero animation
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(12),
                 child: Image.network(
@@ -604,6 +685,7 @@ class _CardListScreenState extends State<CardListScreen> {
                   height: 110,
                   fit: BoxFit.cover,
                   errorBuilder: (context, error, stackTrace) {
+                    // Fallback for failed image loads
                     return Container(
                       width: 80,
                       height: 110,
